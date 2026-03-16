@@ -7,11 +7,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
-      const response = await fetch("/activities");
+      const response = await fetch("/activities", { cache: 'no-cache' });
       const activities = await response.json();
 
       // Clear loading message
       activitiesList.innerHTML = "";
+
+      // Clear and repopulate activity select dropdown
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -20,11 +23,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // build participants list HTML
+        let participantsHtml = "<p><em>No participants yet</em></p>";
+        if (details.participants && details.participants.length > 0) {
+          participantsHtml = `
+            <p><strong>Participants:</strong></p>
+            <ul class="participants-list">
+              ${details.participants
+                .map(
+                  p =>
+                    `<li>${p} <span class="remove-participant" data-activity="${name}" data-email="${p}">&times;</span></li>`
+                )
+                .join("")}
+            </ul>
+          `;
+        }
+
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          ${participantsHtml}
         `;
 
         activitiesList.appendChild(activityCard);
@@ -67,6 +87,9 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.className = "error";
       }
 
+      // refresh activities list after any change
+      fetchActivities();
+
       messageDiv.classList.remove("hidden");
 
       // Hide message after 5 seconds
@@ -78,6 +101,34 @@ document.addEventListener("DOMContentLoaded", () => {
       messageDiv.className = "error";
       messageDiv.classList.remove("hidden");
       console.error("Error signing up:", error);
+    }
+  });
+
+  // delegate click handler for removal
+  activitiesList.addEventListener("click", async (event) => {
+    if (event.target.classList.contains("remove-participant")) {
+      const activity = event.target.dataset.activity;
+      const email = event.target.dataset.email;
+
+      try {
+        const res = await fetch(
+          `/activities/${encodeURIComponent(activity)}/signup?email=${encodeURIComponent(email)}`,
+          { method: "DELETE" }
+        );
+        const result = await res.json();
+        if (res.ok) {
+          messageDiv.textContent = result.message;
+          messageDiv.className = "success";
+        } else {
+          messageDiv.textContent = result.detail || "Failed to remove";
+          messageDiv.className = "error";
+        }
+        messageDiv.classList.remove("hidden");
+        setTimeout(() => messageDiv.classList.add("hidden"), 5000);
+        fetchActivities();
+      } catch (err) {
+        console.error("Error removing participant:", err);
+      }
     }
   });
 
